@@ -21,6 +21,8 @@ coverage/
 
 # Local model weights and huggingface caches
 models/
+!services/evaluator/models/
+!services/evaluator/models/**
 services/qwen/models/
 hf_cache/
 .cache/
@@ -66,5 +68,12 @@ Thumbs.db
 audio_*.webm
 audio_*.wav
 
-# Model binaries
+# Model binaries and large image archives
 *.gguf
+*.tar
+
+# Local database files
+*.db
+*.sqlite
+data/*.db
+data/*.sqlite

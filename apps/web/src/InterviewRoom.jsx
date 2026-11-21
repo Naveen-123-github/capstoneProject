@@ -1,3 +1,4 @@
+import { Icon } from "./ui";
 import { useState, useContext, useEffect, useRef } from "react";
 import { SessionContext } from "./contexts";
 import MonacoEditor from "./MonacoEditor";
@@ -7,6 +8,7 @@ import FeedbackCard from "./FeedbackCard";
 import { useInterviewWS } from "./useInterviewWS";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 import { api } from "./api";
+import { isFollowupPayload, primaryIndexFromPayload, questionProgressLabel } from "./questionProgress";
 import InterviewerAvatar from "./InterviewerAvatar";
 import "./InterviewRoom.css";
 
@@ -43,6 +45,7 @@ export default function InterviewRoom({ navigate }) {
   const [showStartScreen, setShowStartScreen] = useState(true);
   const [startStep, setStartStep]         = useState(0);
   const [followUpQueued, setFollowUpQueued] = useState(false);
+  const [isFollowup, setIsFollowup]       = useState(false);
   const timerRef      = useRef(null);
   const feedbackRef   = useRef(null);
   const evalTimeoutRef = useRef(null);
@@ -69,10 +72,11 @@ export default function InterviewRoom({ navigate }) {
       setAwaitingNext(false);
       setTranscript("");
       setAudioAnalysis(null);
-      setFollowUpQueued(payload.source === "qwen_followup");
-      if (payload.turn_index) {
-        setQuestionIndex(payload.turn_index);
-      }
+      const followup = isFollowupPayload(payload);
+      setFollowUpQueued(followup);
+      setIsFollowup(followup);
+      // primary-question numbering only: a follow-up shows "Follow-up to Question N", never "Question N+1"
+      setQuestionIndex((prev) => primaryIndexFromPayload(payload, prev));
       if (payload.total_questions) {
         setTotalQuestions(payload.total_questions);
       }
@@ -217,6 +221,15 @@ export default function InterviewRoom({ navigate }) {
     send("next_question", { question_id: question?.id });
   };
 
+  const handleRetry = () => {
+    if (!awaitingNext) return;
+    setAwaitingNext(false);
+    setPhase("question");
+    setTranscript("");
+    setStageHint("Ready for another attempt. Apply the feedback and answer again.");
+    send("retry_question", { question_id: question?.id });
+  };
+
   const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   const progress     = Math.min(100, (questionIndex / totalQuestions) * 100);
   const timeWarning  = timeLeft < 120;
@@ -290,7 +303,7 @@ export default function InterviewRoom({ navigate }) {
           <div className="progress-bar" style={{ width: 200 }}>
             <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
-          <span style={{ fontSize: 12, color: "var(--text-2)" }}>Question {questionIndex} of {totalQuestions}</span>
+          <span style={{ fontSize: 12, color: "var(--text-2)" }}>{questionProgressLabel({ isFollowup, questionIndex, totalQuestions })}</span>
         </div>
 
         <div className="interview-topbar-right">
@@ -301,6 +314,15 @@ export default function InterviewRoom({ navigate }) {
           <div className={`conn-indicator ${connected ? "online" : "offline"}`}>
             {connected ? "Connected" : "Reconnecting…"}
           </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              if (window.confirm("Leave this interview? Answers already submitted are saved and will appear in your progress.")) navigate("dashboard");
+            }}
+          >
+            <Icon name="logout" size={14} /> Leave
+          </button>
         </div>
       </div>
 
@@ -309,73 +331,22 @@ export default function InterviewRoom({ navigate }) {
 
         {/* Left: avatar + question + feedback */}
         <div className="interview-left">
+          {/* Unified Question Card with Integrated AI Interviewer */}
           <InterviewerAvatar
             question={question}
             questionIndex={questionIndex}
+            totalQuestions={totalQuestions}
+            difficulty={difficulty}
+            followUpQueued={followUpQueued}
+            isFollowup={isFollowup}
+            session={session}
+            baselineDone={baselineDone}
+            stageHint={stageHint}
+            ttsActive={ttsActive}
             isThinking={phase === "evaluating"}
+            onSkip={handleSkip}
+            connected={connected}
           />
-
-          {/* Question card */}
-          <div className="card question-card">
-            {question ? (
-              <>
-                <div className="question-meta">
-                  <span className="badge badge-accent">Q{questionIndex} of {totalQuestions}</span>
-                  <span className="badge badge-neutral">{question.topic}</span>
-
-                  {followUpQueued && <span className="badge badge-accent" style={{ background: "rgba(0,229,200,0.14)", color: "var(--accent-2)" }}>Follow-up</span>}
-                  {session?.interview_mode === "demo_rl" && !baselineDone && (
-                    <span className="badge badge-warn">Baseline</span>
-                  )}
-                  {session?.interview_mode === "demo_rl" && baselineDone && (
-                    <span className="badge badge-success">RL Active</span>
-                  )}
-                  <span className="badge" style={{
-                    background: difficulty <= 2 ? "rgba(54,217,143,0.14)" : difficulty === 3 ? "rgba(255,184,79,0.14)" : "rgba(255,79,106,0.14)",
-                    color: difficulty <= 2 ? "var(--success)" : difficulty === 3 ? "var(--warn)" : "var(--danger)"
-                  }}>
-                    Level {difficulty}
-                  </span>
-                  {question.type && <span className="badge badge-neutral">{question.type}</span>}
-                </div>
-
-                {stageHint && (
-                  <div style={{ marginTop: 6, marginBottom: 8, padding: "7px 12px", background: "var(--bg-2)", borderRadius: 8, fontSize: 12, color: "var(--text-2)", borderLeft: "3px solid var(--accent)" }}>
-                    {stageHint}
-                  </div>
-                )}
-
-                <div className="question-text">{question.text}</div>
-
-                {question.code_snippet && (
-                  <pre className="code-snippet"><code>{question.code_snippet}</code></pre>
-                )}
-                {question.constraints && (
-                  <div className="constraints-box">
-                    <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text-2)" }}>Constraints: </span>
-                    {question.constraints}
-                  </div>
-                )}
-
-                {!ttsActive && phase !== "evaluating" && (
-                  <div className="question-actions">
-                    <button className="btn btn-ghost btn-sm" onClick={handleSkip}>⏭ Skip Question</button>
-                  </div>
-                )}
-                {ttsActive && (
-                  <div className="question-actions" style={{ opacity: 0.6 }}>
-                    <p style={{ fontSize: 12, color: "var(--text-3)" }}>🔊 Reading question aloud...</p>
-                  </div>
-                )}
-
-              </>
-            ) : (
-              <div className="waiting-state">
-                <div className="waiting-spinner" />
-                <p>{connected ? "Loading question…" : "Connecting to interview server…"}</p>
-              </div>
-            )}
-          </div>
 
           {/* Rich Feedback Card */}
           <div ref={feedbackRef}>
@@ -384,6 +355,7 @@ export default function InterviewRoom({ navigate }) {
                 feedback={feedback}
                 onNext={handleNextQuestion}
                 awaitingNext={awaitingNext}
+                onRetry={handleRetry}
               />
             )}
           </div>
@@ -473,9 +445,9 @@ export default function InterviewRoom({ navigate }) {
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                     <span className="badge badge-accent">
-                      Confidence: {Math.round((audioAnalysis.confidence_score || 0) * 100)}%
+                      Clarity: {(audioAnalysis.confidence_score ?? 1) >= 0.7 ? "High" : (audioAnalysis.confidence_score ?? 1) >= 0.4 ? "Moderate" : "Low"}
                     </span>
-                    <span className="badge badge-neutral">{audioAnalysis.label || "—"}</span>
+                    <span className="badge badge-neutral">{audioAnalysis.label || "Detected"}</span>
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-2)", display: "flex", flexDirection: "column", gap: 3 }}>
                     <span>Speaking rate: {audioAnalysis?.transcription?.true_speaking_rate ?? 0} WPM</span>
@@ -545,7 +517,9 @@ export default function InterviewRoom({ navigate }) {
                 <div className="progress-fill" style={{ width: `${progress}%` }} />
               </div>
               <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-                {questionIndex} of {totalQuestions} questions
+                {isFollowup
+                  ? questionProgressLabel({ isFollowup, questionIndex, totalQuestions })
+                  : `${questionIndex} of ${totalQuestions} questions`}
               </div>
               {!baselineDone && session?.interview_mode === "demo_rl" && (
                 <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 6 }}>

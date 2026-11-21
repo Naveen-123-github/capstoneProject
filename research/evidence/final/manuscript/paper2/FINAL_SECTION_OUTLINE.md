@@ -1,0 +1,10 @@
+# Paper 2 - section outline (IEEE style; venue TBD)
+1 Introduction (measurement of a technical-answer evaluator against human consensus; the locked research question: "How does a composite technical-answer evaluator agree with human consensus and simpler component baselines, and which answer types and perturbations reveal systematic evaluator errors?"; scope: exploratory measurement, not validation)
+2 Related work (ASAG/AES validity and robustness: Powers 2002, Kabra 2020; behavioural testing: Ribeiro 2020; cluster resampling: Field and Welsh 2007; ICC: Koo and Li 2016; first-pass ASAG/LLM-judge items after verification; 2025-2026 surface-form, verbosity and paraphrase-sensitivity sources in research/literature/claude_web_research/P2_2026_BIAS_PASS.md; position the concise/paraphrase finding as a domain measurement of an established bias family; no novelty claim for the evaluator formulation)
+3 The evaluator under evaluation (formula and components as the system under test, not a proposed algorithm; provenance of R incl. fine-tuned derivative status)
+4 Benchmark and human ratings (64 constructed answers, 8 questions, 10 categories, 3 raters, provenance limits stated plainly)
+5 Analysis plan as executed (case and question-cluster bootstrap, ablation, baselines, leave-outs; what was exploratory)
+6 Results (agreement; reliability; components/baselines; bias and robustness diagnostics)
+7 Discussion (what a modest, wide-interval agreement can and cannot say; length confound; safety-hardening trade-off)
+8 Limitations and threats; the blocked confirmatory round
+9 Conclusion (diagnostic findings; no validation claim)
